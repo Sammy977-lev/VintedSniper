@@ -11,7 +11,6 @@ session.headers.update({
     "Referer": "https://www.vinted.it/"
 })
 
-
 def init_vinted_session():
     try:
         session.get("https://www.vinted.it", timeout=10)
@@ -112,7 +111,8 @@ HTML_TEMPLATE = """
                     return;
                 }
 
-                if (data.items) {
+                if (data.items && data.items.length > 0) {
+                    statusText.innerText = "🟢 Radar attivo — Aggiornato ora";
                     const grid = document.getElementById('itemsGrid');
                     data.items.reverse().forEach(item => {
                         if (!seenIds.has(item.id)) {
@@ -151,6 +151,8 @@ HTML_TEMPLATE = """
                         }
                     });
                     document.getElementById('counter').innerText = seenIds.size;
+                } else {
+                    statusText.innerText = "🟢 Radar attivo — Nessun nuovo oggetto trovato";
                 }
             } catch (err) {
                 console.error(err);
@@ -175,11 +177,11 @@ def api_scan():
         "currency": "EUR", "order": "newest_first"
     }
     try:
-        res = session.get("https://www.vinted.it/catalog", params=params, timeout=10)
-
-        if res.status_code in [401, 403]:
+        res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, timeout=10)
+        if res.status_code in [401, 403, 404]:
             init_vinted_session()
             res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, timeout=10)
+        
         if res.status_code == 200:
             raw_items = res.json().get("items", [])
             clean_items = []
