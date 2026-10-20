@@ -175,7 +175,8 @@ def api_scan():
         "currency": "EUR", "order": "newest_first"
     }
     try:
-        res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, timeout=10)
+        res = session.get("https://www.vinted.it/catalog", params=params, timeout=10)
+
         if res.status_code in [401, 403]:
             init_vinted_session()
             res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, timeout=10)
