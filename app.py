@@ -3,21 +3,6 @@ from curl_cffi import requests as cffi_requests
 import os
 
 app = Flask(__name__)
-session = cffi_requests.Session(impersonate="chrome120")
-session.headers.update({
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Referer": "https://www.vinted.it/"
-})
-
-def init_vinted_session():
-    try:
-        session.get("https://www.vinted.it", timeout=10)
-    except Exception as e:
-        print(f"Errore cookie: {e}")
-
-init_vinted_session()
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -152,7 +137,7 @@ HTML_TEMPLATE = """
                     });
                     document.getElementById('counter').innerText = seenIds.size;
                 } else {
-                    statusText.innerText = "🟢 Radar attivo — Nessun nuovo oggetto trovato";
+                    statusText.innerText = "🟢 Radar attivo — In attesa di nuovi oggetti";
                 }
             } catch (err) {
                 console.error(err);
@@ -171,19 +156,33 @@ def index():
 def api_scan():
     search_text = request.args.get("search", "nike")
     price_to = request.args.get("price_to", "15")
-    params = {
-        "page": 1, "per_page": 20,
-        "search_text": search_text, "price_to": price_to,
-        "currency": "EUR", "order": "newest_first"
-    }
+    
     try:
-        res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, timeout=10)
-        if res.status_code in [401, 403, 404]:
-            init_vinted_session()
-            res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, timeout=10)
+        session = cffi_requests.Session(impersonate="chrome120")
+        
+        # 1. Otteniamo i cookie iniziali dalla home di Vinted
+        session.get("https://www.vinted.it", timeout=10)
+        
+        # 2. Prepariamo i parametri per le API
+        params = {
+            "search_text": search_text,
+            "price_to": price_to,
+            "currency": "EUR",
+            "order": "newest_first",
+            "per_page": 20
+        }
+        
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://www.vinted.it/",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+        
+        res = session.get("https://www.vinted.it/api/v2/catalog/items", params=params, headers=headers, timeout=10)
         
         if res.status_code == 200:
-            raw_items = res.json().get("items", [])
+            data = res.json()
+            raw_items = data.get("items", [])
             clean_items = []
             for item in raw_items:
                 photo_info = item.get("photo") or {}
@@ -199,7 +198,8 @@ def api_scan():
                     "photo_url": photo_url
                 })
             return jsonify({"items": clean_items})
-        return jsonify({"items": [], "error": f"Blocco HTTP {res.status_code}"})
+        
+        return jsonify({"items": [], "error": f"Errore Vinted HTTP {res.status_code}"})
     except Exception as e:
         return jsonify({"items": [], "error": str(e)})
 
